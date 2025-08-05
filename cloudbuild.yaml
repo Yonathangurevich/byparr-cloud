@@ -1,36 +1,38 @@
 steps:
   # Build the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/byparr:$COMMIT_SHA', '.']
+    args: ['build', '-t', 'gcr.io/turing-diode-466017-d1/byparr:$COMMIT_SHA', '.']
   
-  # Push the container image to Container Registry
+  # Push the container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/byparr:$COMMIT_SHA']
+    args: ['push', 'gcr.io/turing-diode-466017-d1/byparr:$COMMIT_SHA']
   
-  # Deploy container image to Cloud Run
+  # Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
-      - 'byparr'
+      - 'byparr-cloud'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/byparr:$COMMIT_SHA'
+      - 'gcr.io/turing-diode-466017-d1/byparr:$COMMIT_SHA'
       - '--region'
-      - 'us-central1'
+      - 'me-west1'
       - '--platform'
       - 'managed'
       - '--memory'
       - '2Gi'
       - '--cpu'
-      - '2'
+      - '2'  # שנה ל-2 CPUs
       - '--timeout'
       - '3600'
+      - '--min-instances'
+      - '0'  # חשוב! לא 10!
       - '--max-instances'
-      - '10'
+      - '5'  # מספיק
       - '--allow-unauthenticated'
       - '--set-env-vars'
-      - 'USE_XVFB=True,USE_HEADLESS=True'
+      - 'USE_XVFB=True,USE_HEADLESS=True,PORT=8191'
 
 images:
-  - 'gcr.io/$PROJECT_ID/byparr:$COMMIT_SHA'
+  - 'gcr.io/turing-diode-466017-d1/byparr:$COMMIT_SHA'
