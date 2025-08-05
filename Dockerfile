@@ -1,4 +1,4 @@
-# Use Python slim image
+# Base image
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     git \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Chrome
@@ -18,25 +19,29 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
 # Set working directory
 WORKDIR /app
 
-# Clone BYPARR repository
-RUN git clone https://github.com/ThePhaseless/Byparr.git /tmp/byparr \
-    && cp -r /tmp/byparr/* . \
-    && rm -rf /tmp/byparr
+# Clone BYPARR
+RUN git clone https://github.com/ThePhaseless/Byparr.git . \
+    && rm -rf .git
+
+# Copy our requirements if exists, otherwise use BYPARR's
+COPY requirements.txt requirements.txt 2>/dev/null || cp requirements.txt requirements.txt
 
 # Install Python dependencies
-COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy our Cloud Run wrapper
-COPY main_cloudrun.py .
+# Create a startup script that handles PORT
+RUN echo '#!/bin/bash\n\
+export PORT=${PORT:-8191}\n\
+echo "Starting BYPARR on port $PORT"\n\
+python -m uvicorn main:app --host 0.0.0.0 --port $PORT' > /app/start.sh \
+    && chmod +x /app/start.sh
 
 # Set environment variables
-ENV PORT=8191
 ENV PYTHONUNBUFFERED=1
 ENV USE_HEADLESS=True
 
-# Expose port
+# The PORT will be set by Cloud Run
 EXPOSE 8191
 
-# Run the application
-CMD ["python", "main_cloudrun.py"]
+# Use the startup script
+CMD ["/app/start.sh"]
