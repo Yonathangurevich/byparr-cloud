@@ -1,4 +1,4 @@
-# Base image
+# Use Python 3.11 slim
 FROM python:3.11-slim
 
 # Install system dependencies
@@ -19,29 +19,45 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
 # Set working directory
 WORKDIR /app
 
-# Clone BYPARR
-RUN git clone https://github.com/ThePhaseless/Byparr.git . \
-    && rm -rf .git
-
-# Copy our requirements if exists, otherwise use BYPARR's
-COPY requirements.txt requirements.txt 2>/dev/null || cp requirements.txt requirements.txt
+# Clone BYPARR repository
+RUN git clone https://github.com/ThePhaseless/Byparr.git /tmp/byparr \
+    && cp -r /tmp/byparr/* . \
+    && rm -rf /tmp/byparr
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create a startup script that handles PORT
-RUN echo '#!/bin/bash\n\
-export PORT=${PORT:-8191}\n\
-echo "Starting BYPARR on port $PORT"\n\
-python -m uvicorn main:app --host 0.0.0.0 --port $PORT' > /app/start.sh \
-    && chmod +x /app/start.sh
+# Create a proper startup script
+RUN echo '#!/usr/bin/env python3\n\
+import os\n\
+import sys\n\
+\n\
+# Set port from environment\n\
+PORT = int(os.environ.get("PORT", 8191))\n\
+os.environ["PORT"] = str(PORT)\n\
+\n\
+# Set Chrome options\n\
+os.environ["CHROME_ARGS"] = "--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu --headless"\n\
+\n\
+print(f"Starting BYPARR on port {PORT}")\n\
+\n\
+# Import and run the main app directly\n\
+import uvicorn\n\
+from main import app\n\
+\n\
+if __name__ == "__main__":\n\
+    uvicorn.run(app, host="0.0.0.0", port=PORT)\n\
+' > /app/start_server.py
 
-# Set environment variables
+# Make it executable
+RUN chmod +x /app/start_server.py
+
+# Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV USE_HEADLESS=True
 
-# The PORT will be set by Cloud Run
+# Expose port (will be overridden by Cloud Run)
 EXPOSE 8191
 
-# Use the startup script
-CMD ["/app/start.sh"]
+# Run the server
+CMD ["python", "/app/start_server.py"]
